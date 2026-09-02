@@ -1,0 +1,25 @@
+# Secretos y entorno local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*
+
+# Python
+.venv/
+venv/
+entorno/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Datos y salidas (no versionar)
+/data/
+/manifests/
+*.nc
+*.netcdf
+
+# OS
+.DS_Store
+Thumbs.db

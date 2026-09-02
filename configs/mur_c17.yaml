@@ -1,0 +1,16 @@
+# Dominio de descarga: Chile + sur de Peru, con margen oceanico.
+# lon_min, lat_min, lon_max, lat_max
+bbox:
+  lon_min: -82.0
+  lat_min: -56.0
+  lon_max: -68.0
+  lat_max: -15.0
+
+dataset:
+  short_name: MUR-JPL-L4-GLOB-v4.1
+  version: "4.1"
+  sst_var: analysed_sst
+
+smoke:
+  start: "2023-01-01"
+  end: "2023-01-07"
