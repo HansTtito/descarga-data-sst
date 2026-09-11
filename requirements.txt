@@ -8,3 +8,4 @@ h5py>=3.10.0
 numpy>=1.26.0
 fsspec>=2024.1.0
 aiohttp>=3.9.0
+b2sdk>=2.5.0

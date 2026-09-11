@@ -14,3 +14,8 @@ dataset:
 smoke:
   start: "2023-01-01"
   end: "2023-01-07"
+
+# Usado por scripts/upload_to_b2.py para subir a Backblaze B2 lo ya descargado localmente.
+b2:
+  prefix: raw/mur/
+  manifest_prefix: manifests/uploads/
