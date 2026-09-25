@@ -1,0 +1,53 @@
+raw_dir: data/raw/mur
+product_dir: data/c17
+runs_dir: data/runs
+sst_var: analysed_sst
+
+product:
+  start: '2002-06-01'
+  end: '2023-12-31'
+
+grid:
+  lat_start: -38.9375
+  lat_end: -21.0625
+  lon_start: -80.0625
+  lon_end: -70.1875
+  step_degrees: 0.125
+  height: 144
+  width: 80
+  interpolation: linear
+
+quality:
+  min_sst_c: -2.0
+  max_sst_c: 40.0
+  min_daily_valid_fraction: 0.5
+  max_daily_valid_fraction_span: 0.02
+
+splits:
+  train:
+    start: '2002-06-01'
+    end: '2019-12-31'
+  validation:
+    start: '2020-01-01'
+    end: '2023-12-31'
+
+horizon_days: 7
+coastal_km: 50.0
+
+climatology:
+  window_days: 7
+  trim_fraction: 0.1
+
+model:
+  base_channels: 16
+
+training:
+  batch_size: 32
+  epochs: 60
+  learning_rate: 0.001
+  early_stopping_patience: 5
+
+b2:
+  root_prefix: oceanografia/sst-IA/
+  product_prefix: interim/mur_12p5km/
+  experiment_prefix: c17_hist_

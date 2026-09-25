@@ -1,13 +1,3 @@
-"""Descarga MUR SST, recorta al dominio configurado y guarda los NetCDF en disco.
-
-Requiere en `.env`:
-  EARTHDATA_TOKEN (o EARTHDATA_USERNAME + EARTHDATA_PASSWORD)
-  Cuenta: https://urs.earthdata.nasa.gov/
-
-Uso:
-  python scripts/download_mur.py --start 2002-06-01 --end 2026-09-02
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -21,6 +11,7 @@ from calendar import monthrange
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from uuid import uuid4
+import time as _time
 
 import earthaccess
 import xarray as xr
@@ -150,6 +141,21 @@ def earthdata_login() -> None:
         raise SystemExit("Login Earthdata fallo. Revisa token o usuario/contrasena.")
 
 
+def with_retries(fn, *args, retries: int = 5, base_delay: float = 10.0, **kwargs):
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            last_exc = exc
+            if attempt == retries:
+                break
+            wait = base_delay * attempt
+            print(f"  Reintento {attempt}/{retries} tras error de conexion: {exc}. Esperando {wait:.0f}s...")
+            _time.sleep(wait)
+    raise last_exc
+
+
 def process_range(
     start: str,
     end: str,
@@ -172,7 +178,8 @@ def process_range(
     temporal_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc).isoformat()
     temporal_end = datetime.combine(end_date, time.max, tzinfo=timezone.utc).isoformat()
     print(f"Buscando {short_name} {start} -> {end} (fin inclusivo) ...")
-    results = earthaccess.search_data(
+    results = with_retries(
+        earthaccess.search_data,
         short_name=short_name,
         version=version,
         cloud_hosted=True,
@@ -183,7 +190,7 @@ def process_range(
         return 0, 0, 1
 
     print(f"Granules: {len(results)}")
-    fileset = list(earthaccess.open(results))
+    fileset = list(with_retries(earthaccess.open, results))
     if len(fileset) != len(results):
         raise RuntimeError(
             f"Earthdata devolvio {len(fileset)} handles para {len(results)} granules; "

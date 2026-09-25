@@ -1,20 +1,3 @@
-"""Sube a Backblaze B2 los NetCDF ya descargados localmente (data/raw/mur/).
-
-Piensa esto como el paso "sincronizar": revisa que hay en tu disco local
-(lo que baja scripts/download_mur.py) y sube a B2 lo que todavia no este ahi,
-sin volver a subir lo que ya coincide (mismo tamano y SHA-1).
-
-Uso:
-  python scripts/upload_to_b2.py --dry-run   # solo muestra que subiria
-  python scripts/upload_to_b2.py             # sube de verdad
-  python scripts/upload_to_b2.py --no-skip-existing
-
-Requisitos en `.env` (ademas de los de Earthdata):
-  B2_APPLICATION_KEY_ID
-  B2_APPLICATION_KEY
-  B2_BUCKET_NAME
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -51,7 +34,6 @@ def load_config(path: Path) -> dict:
 
 
 def with_retries(fn, *args, retries: int = 5, base_delay: float = 10.0, **kwargs):
-    """Reintenta fn(*args, **kwargs) ante errores de red/conexion, con espera creciente."""
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
         try:
@@ -84,7 +66,6 @@ def get_object_info(bucket, key: str):
 
 
 def upload_verified(bucket, payload: bytes, b2_key: str) -> tuple[int, str]:
-    """Sube bytes y verifica tamano y SHA-1 contra la respuesta de B2."""
     size = len(payload)
     checksum = hashlib.sha1(payload).hexdigest()
     uploaded = bucket.upload_bytes(payload, b2_key, content_type="application/netcdf")
@@ -98,7 +79,6 @@ def upload_verified(bucket, payload: bytes, b2_key: str) -> tuple[int, str]:
 
 
 def append_manifest_row(bucket, prefix: str, row: dict) -> None:
-    """Append-only simple: sube un CSV por evento (evita read-modify con key restringida)."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     key = f"{prefix}upload_{ts}_{uuid4().hex[:8]}.csv"
     buf = io.StringIO()
@@ -126,16 +106,6 @@ def run(
     min_age_seconds: float = MIN_AGE_SECONDS_DEFAULT,
     now: float | None = None,
 ):
-    """Si dry_run=True, igual consulta B2 (solo lectura) para mostrar un preview
-    real: que se saltaria, que subiria y que quedaria en conflicto (mismo
-    nombre, contenido distinto) — no sube ni escribe nada.
-
-    min_age_seconds evita leer un archivo que el script de descarga todavia
-    podria estar escribiendo (util si este script corre en paralelo con
-    scripts/download_mur.py sobre la misma carpeta): si un archivo se
-    modifico hace menos de ese tiempo, se deja pendiente para una proxima
-    corrida en vez de subirlo a medio escribir.
-    """
     now = _time.time() if now is None else now
     ok = skipped = failed = pending = 0
     for i, path in enumerate(files, start=1):

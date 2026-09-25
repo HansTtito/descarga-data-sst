@@ -1,0 +1,9 @@
+numpy>=1.26.0
+xarray>=2024.1.0
+netCDF4>=1.6.0
+scipy>=1.11.0
+PyYAML>=6.0
+torch>=2.2
+python-dotenv>=1.0.0
+b2sdk>=2.5.0
+matplotlib>=3.8
