@@ -6,6 +6,7 @@ import hashlib
 import os
 import sys
 import tempfile
+import time
 import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -137,7 +138,7 @@ def process_chunk(client, bucket, cfg: dict, first: date, last: date, local_dir:
         work = Path(work_dir)
         raw = work / "download"
         print(f"CDS {first} -> {last} ...", flush=True)
-        with_retries(retrieve, client, cfg, first, last, raw, retries=3, base_delay=60.0)
+        with_retries(retrieve, client, cfg, first, last, raw, retries=5, base_delay=60.0)
         ds = open_download(raw, work)
         checks = validate(ds, cfg, first, last)
         expvers = expver_values(ds)
@@ -151,8 +152,9 @@ def process_chunk(client, bucket, cfg: dict, first: date, last: date, local_dir:
     if with_retries(get_object_info, bucket, key) is not None:
         print(f"SKIP ya en B2: {key}", flush=True)
         return "skipped"
-    size, sha1 = with_retries(upload_verified, bucket, payload, key)
-    append_manifest_row(
+    size, sha1 = with_retries(upload_verified, bucket, payload, key, retries=8, base_delay=30.0)
+    with_retries(
+        append_manifest_row,
         bucket,
         cfg["b2"]["manifest_prefix"],
         {
@@ -169,6 +171,8 @@ def process_chunk(client, bucket, cfg: dict, first: date, last: date, local_dir:
             "sha1": sha1,
             "sha256": hashlib.sha256(payload).hexdigest(),
         },
+        retries=8,
+        base_delay=30.0,
     )
     print(f"OK {key} {size / 1e6:.1f} MB{' (ERA5T preliminar)' if preliminary else ''}", flush=True)
     if delete_local:
@@ -184,6 +188,8 @@ def main() -> int:
     parser.add_argument("--local-dir", type=Path, default=ROOT / "data" / "raw" / "era5")
     parser.add_argument("--delete-local", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--passes", type=int, default=6)
+    parser.add_argument("--pass-wait-minutes", type=float, default=30.0)
     args = parser.parse_args()
     load_dotenv(ROOT / ".env")
     cfg = load_config(args.config)
@@ -206,17 +212,27 @@ def main() -> int:
         url=os.getenv("CDSAPI_URL", "https://cds.climate.copernicus.eu/api").strip(),
         key=require_env("CDSAPI_KEY"),
     )
-    api, bucket_name = b2_api()
-    bucket = api.get_bucket_by_name(bucket_name)
-    counts = {"ok": 0, "skipped": 0, "failed": 0}
-    for first, last in chunks:
-        try:
-            counts[process_chunk(client, bucket, cfg, first, last, args.local_dir, args.delete_local)] += 1
-        except Exception as exc:
-            counts["failed"] += 1
-            print(f"FALLO {first} -> {last}: {exc}", flush=True)
-    print(f"ok={counts['ok']} skipped={counts['skipped']} failed={counts['failed']}", flush=True)
-    return 1 if counts["failed"] else 0
+    api, bucket_name = with_retries(b2_api, retries=10, base_delay=60.0)
+    bucket = with_retries(api.get_bucket_by_name, bucket_name, retries=10, base_delay=60.0)
+    counts = {"ok": 0, "skipped": 0}
+    pending = chunks
+    for attempt in range(1, args.passes + 1):
+        failed = []
+        for first, last in pending:
+            try:
+                counts[process_chunk(client, bucket, cfg, first, last, args.local_dir, args.delete_local)] += 1
+            except Exception as exc:
+                failed.append((first, last))
+                print(f"FALLO {first} -> {last}: {exc}", flush=True)
+        print(f"pasada {attempt}/{args.passes}: ok={counts['ok']} skipped={counts['skipped']} failed={len(failed)}", flush=True)
+        pending = failed
+        if not pending:
+            return 0
+        if attempt < args.passes:
+            print(f"reintento de {len(pending)} bloques en {args.pass_wait_minutes:.0f} min", flush=True)
+            time.sleep(args.pass_wait_minutes * 60)
+    print("sin resolver: " + " ".join(f"{a}..{b}" for a, b in pending), flush=True)
+    return 1
 
 
 if __name__ == "__main__":
