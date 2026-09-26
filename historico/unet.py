@@ -34,6 +34,9 @@ class C17UNet3D(nn.Module):
         self.decoder1 = DoubleConv3d(c1 + c1, c1)
         self.output = nn.Conv3d(c1, 1, kernel_size=1)
         self.temporal_projection = nn.Linear(int(context), int(horizon))
+        with torch.no_grad():
+            self.temporal_projection.weight.zero_()
+            self.temporal_projection.bias.zero_()
 
     def forward(self, x):
         e1 = self.encoder1(x)

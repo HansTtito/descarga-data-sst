@@ -30,6 +30,11 @@ from scripts.upload_to_b2 import (
 
 DEFAULT_CONFIG = ROOT / "configs" / "era5.yaml"
 PRELIMINARY_EXPVER = "0005"
+FATAL_MARKERS = ("401 Client Error", "403 Client Error", "licences not accepted", "not authorized")
+
+
+class FatalCdsError(Exception):
+    pass
 
 
 def month_chunks(start: date, end: date) -> list[tuple[date, date]]:
@@ -125,7 +130,27 @@ def write_compressed(ds: xr.Dataset, cfg: dict, target: Path) -> None:
 
 
 def retrieve(client, cfg: dict, first: date, last: date, target: Path) -> None:
-    client.retrieve(cfg["dataset"], build_request(cfg, first, last)).download(str(target))
+    try:
+        client.retrieve(cfg["dataset"], build_request(cfg, first, last)).download(str(target))
+    except Exception as exc:
+        if any(marker.lower() in str(exc).lower() for marker in FATAL_MARKERS):
+            raise FatalCdsError(str(exc)) from exc
+        raise
+
+
+def retrieve_with_retries(client, cfg: dict, first: date, last: date, target: Path, retries: int = 5, base_delay: float = 60.0) -> None:
+    for attempt in range(1, retries + 1):
+        try:
+            retrieve(client, cfg, first, last, target)
+            return
+        except FatalCdsError:
+            raise
+        except Exception as exc:
+            if attempt == retries:
+                raise
+            wait = base_delay * attempt
+            print(f"  Reintento {attempt}/{retries} tras error: {exc}. Esperando {wait:.0f}s...", flush=True)
+            time.sleep(wait)
 
 
 def process_chunk(client, bucket, cfg: dict, first: date, last: date, local_dir: Path, delete_local: bool) -> str:
@@ -138,7 +163,8 @@ def process_chunk(client, bucket, cfg: dict, first: date, last: date, local_dir:
         work = Path(work_dir)
         raw = work / "download"
         print(f"CDS {first} -> {last} ...", flush=True)
-        with_retries(retrieve, client, cfg, first, last, raw, retries=5, base_delay=60.0)
+        retrieve_with_retries(client, cfg, first, last, raw)
+
         ds = open_download(raw, work)
         checks = validate(ds, cfg, first, last)
         expvers = expver_values(ds)
@@ -221,6 +247,9 @@ def main() -> int:
         for first, last in pending:
             try:
                 counts[process_chunk(client, bucket, cfg, first, last, args.local_dir, args.delete_local)] += 1
+            except FatalCdsError as exc:
+                print(f"DETENIDO: error de cuenta CDS (token o licencia), no se reintenta.\n{exc}", flush=True)
+                return 2
             except Exception as exc:
                 failed.append((first, last))
                 print(f"FALLO {first} -> {last}: {exc}", flush=True)
