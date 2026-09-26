@@ -14,5 +14,5 @@ smoke:
   end: "2023-01-07"
 
 b2:
-  prefix: raw/mur/
-  manifest_prefix: manifests/uploads/
+  prefix: oceanografia/sst-IA/raw/mur
+  manifest_prefix: oceanografia/sst-IA/manifests/uploads_vm
